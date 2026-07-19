@@ -11,14 +11,17 @@
         input { padding: 12px; width: 300px; border-radius: 20px; border: 2px solid #fbc02d; outline: none; }
         button { padding: 12px 25px; border-radius: 20px; border: none; background: #fbc02d; color: white; cursor: pointer; font-weight: bold; }
         #output { display: flex; gap: 20px; margin-top: 30px; max-width: 800px; margin-left: auto; margin-right: auto; }
-        .box { flex: 1; padding: 25px; border-radius: 20px; background: white; box-shadow: 0 8px 16px rgba(0,0,0,0.05); }
-        .loading { display: none; margin-top: 20px; color: #757575; }
+        .box { flex: 1; padding: 25px; border-radius: 20px; background: white; box-shadow: 0 8px 16px rgba(0,0,0,0.05); display: flex; flex-direction: column; justify-content: center; align-items: center; min-height: 250px; }
+        .loading { display: none; margin-top: 20px; color: #757575; font-weight: bold; }
         
         /* 게시판 스타일 */
         #board { margin-top: 50px; max-width: 800px; margin-left: auto; margin-right: auto; text-align: left; background: white; padding: 20px; border-radius: 20px; box-shadow: 0 8px 16px rgba(0,0,0,0.05); }
         .post { border-bottom: 1px solid #eee; padding: 15px 0; }
         .post:last-child { border-bottom: none; }
         .post-date { font-size: 0.8em; color: #999; margin-top: 5px; }
+        
+        /* 이미지 스타일 */
+        #generatedImage { width: 100%; max-width: 300px; border-radius: 15px; box-shadow: 0 4px 8px rgba(0,0,0,0.1); object-fit: cover; }
     </style>
 </head>
 <body>
@@ -27,7 +30,7 @@
         <input type="text" id="userInput" placeholder="지금 기분을 말해봐요!">
         <button id="submitBtn">힘내기!</button>
     </div>
-    <div id="loading" class="loading">Gemini가 위로를 고민 중이에요...</div>
+    <div id="loading" class="loading">AI가 따뜻한 위로와 이미지를 준비하고 있습니다...</div>
     
     <div id="output">
         <div class="box" id="imageArea">따뜻한 이미지가 여기에 나타납니다.</div>
@@ -40,12 +43,11 @@
         <div id="postList">목록을 불러오는 중...</div>
     </div>
 
-    <!-- Firebase SDK (type="module" 적용) -->
+    <!-- Firebase SDK -->
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
         import { getFirestore, collection, addDoc, getDocs, query, orderBy, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
-        // 1. Firebase 웹 설정값
         const firebaseConfig = {
             apiKey: "AIzaSyDWxwq3Tkw8NAtkzeHcBUOHVKyKU3AaOuw",
             authDomain: "smile-f9123.firebaseapp.com",
@@ -58,7 +60,7 @@
         const app = initializeApp(firebaseConfig);
         const db = getFirestore(app);
 
-        // 2. 게시글 목록 불러오기 (최신순)
+        // 게시글 목록 불러오기
         async function loadPosts() {
             const postList = document.getElementById('postList');
             postList.innerHTML = '';
@@ -89,16 +91,20 @@
             }
         }
 
-        // 3. 기존 Gemini 처리 및 Firebase 저장 로직
+        // Gemini API 호출 및 Firebase 저장
         async function getSmile() {
             const prompt = document.getElementById('userInput').value;
             if(!prompt) return alert('기분을 입력해주세요!');
             
             const loading = document.getElementById('loading');
+            const imageArea = document.getElementById('imageArea');
+            const messageArea = document.getElementById('messageArea');
+            
             loading.style.display = 'block';
+            imageArea.innerHTML = '이미지 생성 중...';
+            messageArea.innerHTML = '처방전 작성 중...';
             
             try {
-                // 기존 API 호출 로직
                 const res = await fetch('/api/generate', {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
@@ -108,33 +114,34 @@
                 
                 loading.style.display = 'none';
                 
-                // 화면 출력 유지
-                document.getElementById('messageArea').innerHTML = `<h3>오늘의 처방전</h3><p>${data.message}</p>`;
-                const imageUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(data.imagePrompt)}?width=400&height=400&nologo=true`;
-                document.getElementById('imageArea').innerHTML = `<img src="${imageUrl}" alt="오늘의 위로 이미지" style="width: 100%; border-radius: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">`;
+                // 1. 텍스트 출력
+                messageArea.innerHTML = `<h3>오늘의 처방전</h3><p>${data.message}</p>`;
+                
+                // 2. 이미지 출력 (예외 처리 및 Fallback 추가)
+                const safePrompt = data.imagePrompt ? data.imagePrompt : "A cute happy smile, bright colors, 3d render";
+                const imageUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(safePrompt)}?width=400&height=400&nologo=true`;
+                
+                // 이미지 로딩 실패 시 기본 이미지(placehold)를 띄우도록 onerror 속성 추가
+                imageArea.innerHTML = `<img id="generatedImage" src="${imageUrl}" alt="오늘의 위로 이미지" onerror="this.src='https://placehold.co/400x400/fffde7/fbc02d?text=Smile'">`;
 
-                // Firebase Firestore에 새 데이터 추가
+                // 3. Firebase 저장
                 await addDoc(collection(db, "smiles"), {
                     prompt: prompt,
                     message: data.message,
                     createdAt: serverTimestamp()
                 });
 
-                // 저장 완료 후 게시판 즉시 새로고침 및 입력창 초기화
                 loadPosts();
                 document.getElementById('userInput').value = '';
 
             } catch (error) {
                 loading.style.display = 'none';
-                alert('처리 중 오류가 발생했습니다.');
+                alert('처리 중 오류가 발생했습니다. 다시 시도해주세요.');
                 console.error(error);
             }
         }
 
-        // 모듈 환경이므로 버튼에 이벤트 리스너 직접 등록
         document.getElementById('submitBtn').addEventListener('click', getSmile);
-
-        // 페이지가 열릴 때 자동으로 목록 불러오기
         window.onload = loadPosts;
     </script>
 </body>
