@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>매일 스마일</title>
+    <style>
+        body { font-family: 'Pretendard', sans-serif; background: #fffde7; text-align: center; padding: 40px 20px; color: #5d4037; }
+        h1 { color: #fbc02d; }
+        #inputBox { margin-bottom: 30px; }
+        input { padding: 12px; width: 300px; border-radius: 20px; border: 2px solid #fbc02d; outline: none; }
+        button { padding: 12px 25px; border-radius: 20px; border: none; background: #fbc02d; color: white; cursor: pointer; font-weight: bold; }
+        #output { display: flex; gap: 20px; margin-top: 30px; max-width: 800px; margin-left: auto; margin-right: auto; }
+        .box { flex: 1; padding: 25px; border-radius: 20px; background: white; box-shadow: 0 8px 16px rgba(0,0,0,0.05); }
+        .loading { display: none; margin-top: 20px; color: #757575; }
+    </style>
+</head>
+<body>
+    <h1>😊 매일 스마일</h1>
+    <div id="inputBox">
+        <input type="text" id="userInput" placeholder="지금 기분을 말해봐요!">
+        <button onclick="getSmile()">힘내기!</button>
+    </div>
+    <div id="loading" class="loading">Gemini가 위로를 고민 중이에요...</div>
+    
+    <div id="output">
+        <div class="box" id="imageArea">따뜻한 이미지가 여기에 나타납니다.</div>
+        <div class="box" id="messageArea">당신을 위한 위로의 문구가 나타납니다.</div>
+    </div>
+
+    <script>
+        async function getSmile() {
+            const prompt = document.getElementById('userInput').value;
+            if(!prompt) return alert('기분을 입력해주세요!');
+            
+            const loading = document.getElementById('loading');
+            loading.style.display = 'block';
+            
+            const res = await fetch('/api/generate', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ prompt })
+            });
+            const data = await res.json();
+            
+            loading.style.display = 'none';
+            document.getElementById('messageArea').innerHTML = `<h3>오늘의 처방전</h3><p>${data.message}</p>`;
+            document.getElementById('imageArea').innerHTML = `<h3>추천 이미지 프롬프트</h3><p>${data.imagePrompt}</p>`;
+        }
+    </script>
+</body>
+</html>
