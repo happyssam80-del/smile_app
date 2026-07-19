@@ -13,13 +13,19 @@
         #output { display: flex; gap: 20px; margin-top: 30px; max-width: 800px; margin-left: auto; margin-right: auto; }
         .box { flex: 1; padding: 25px; border-radius: 20px; background: white; box-shadow: 0 8px 16px rgba(0,0,0,0.05); }
         .loading { display: none; margin-top: 20px; color: #757575; }
+        
+        /* 게시판 스타일 */
+        #board { margin-top: 50px; max-width: 800px; margin-left: auto; margin-right: auto; text-align: left; background: white; padding: 20px; border-radius: 20px; box-shadow: 0 8px 16px rgba(0,0,0,0.05); }
+        .post { border-bottom: 1px solid #eee; padding: 15px 0; }
+        .post:last-child { border-bottom: none; }
+        .post-date { font-size: 0.8em; color: #999; margin-top: 5px; }
     </style>
 </head>
 <body>
     <h1>😊 매일 스마일</h1>
     <div id="inputBox">
         <input type="text" id="userInput" placeholder="지금 기분을 말해봐요!">
-        <button onclick="getSmile()">힘내기!</button>
+        <button id="submitBtn">힘내기!</button>
     </div>
     <div id="loading" class="loading">Gemini가 위로를 고민 중이에요...</div>
     
@@ -28,7 +34,62 @@
         <div class="box" id="messageArea">당신을 위한 위로의 문구가 나타납니다.</div>
     </div>
 
-    <script>
+    <!-- 게시판 영역 -->
+    <div id="board">
+        <h3>📝 모두의 스마일 기록 (최신순)</h3>
+        <div id="postList">목록을 불러오는 중...</div>
+    </div>
+
+    <!-- Firebase SDK (type="module" 적용) -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+        import { getFirestore, collection, addDoc, getDocs, query, orderBy, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+        // 1. Firebase 웹 설정값
+        const firebaseConfig = {
+            apiKey: "AIzaSyDWxwq3Tkw8NAtkzeHcBUOHVKyKU3AaOuw",
+            authDomain: "smile-f9123.firebaseapp.com",
+            projectId: "smile-f9123",
+            storageBucket: "smile-f9123.firebasestorage.app",
+            messagingSenderId: "459520528113",
+            appId: "1:459520528113:web:45df4b30ca054e01ce6350"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+
+        // 2. 게시글 목록 불러오기 (최신순)
+        async function loadPosts() {
+            const postList = document.getElementById('postList');
+            postList.innerHTML = '';
+            
+            try {
+                const q = query(collection(db, "smiles"), orderBy("createdAt", "desc"));
+                const querySnapshot = await getDocs(q);
+                
+                if (querySnapshot.empty) {
+                    postList.innerHTML = '<p>아직 기록이 없습니다.</p>';
+                    return;
+                }
+
+                querySnapshot.forEach((doc) => {
+                    const data = doc.data();
+                    const date = data.createdAt ? new Date(data.createdAt.toMillis()).toLocaleString() : '방금 전';
+                    postList.innerHTML += `
+                        <div class="post">
+                            <div><strong>우울했던 기분:</strong> ${data.prompt}</div>
+                            <div><strong>AI의 처방전:</strong> ${data.message}</div>
+                            <div class="post-date">${date}</div>
+                        </div>
+                    `;
+                });
+            } catch (error) {
+                console.error("게시글 불러오기 실패:", error);
+                postList.innerHTML = '<p>기록을 불러오지 못했습니다.</p>';
+            }
+        }
+
+        // 3. 기존 Gemini 처리 및 Firebase 저장 로직
         async function getSmile() {
             const prompt = document.getElementById('userInput').value;
             if(!prompt) return alert('기분을 입력해주세요!');
@@ -36,17 +97,45 @@
             const loading = document.getElementById('loading');
             loading.style.display = 'block';
             
-            const res = await fetch('/api/generate', {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({ prompt })
-            });
-            const data = await res.json();
-            
-            loading.style.display = 'none';
-            document.getElementById('messageArea').innerHTML = `<h3>오늘의 처방전</h3><p>${data.message}</p>`;
-            document.getElementById('imageArea').innerHTML = `<h3>추천 이미지 프롬프트</h3><p>${data.imagePrompt}</p>`;
+            try {
+                // 기존 API 호출 로직
+                const res = await fetch('/api/generate', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ prompt })
+                });
+                const data = await res.json();
+                
+                loading.style.display = 'none';
+                
+                // 화면 출력 유지
+                document.getElementById('messageArea').innerHTML = `<h3>오늘의 처방전</h3><p>${data.message}</p>`;
+                const imageUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(data.imagePrompt)}?width=400&height=400&nologo=true`;
+                document.getElementById('imageArea').innerHTML = `<img src="${imageUrl}" alt="오늘의 위로 이미지" style="width: 100%; border-radius: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">`;
+
+                // Firebase Firestore에 새 데이터 추가
+                await addDoc(collection(db, "smiles"), {
+                    prompt: prompt,
+                    message: data.message,
+                    createdAt: serverTimestamp()
+                });
+
+                // 저장 완료 후 게시판 즉시 새로고침 및 입력창 초기화
+                loadPosts();
+                document.getElementById('userInput').value = '';
+
+            } catch (error) {
+                loading.style.display = 'none';
+                alert('처리 중 오류가 발생했습니다.');
+                console.error(error);
+            }
         }
+
+        // 모듈 환경이므로 버튼에 이벤트 리스너 직접 등록
+        document.getElementById('submitBtn').addEventListener('click', getSmile);
+
+        // 페이지가 열릴 때 자동으로 목록 불러오기
+        window.onload = loadPosts;
     </script>
 </body>
 </html>
