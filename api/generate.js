@@ -14,7 +14,7 @@ export default async function handler(req, res) {
 
     // 3. Gemini API 초기화 및 모델 설정
     const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-    const model = genAI.getGenerativeModel({ model: "gemini-pro" });
+    const model = genAI.getGenerativeModel({ model: "gemini-3.1-flash-lite" });
     
     // 4. 프롬프트 구성 및 데이터 요청
     const { prompt } = req.body;
